@@ -17,7 +17,7 @@ namespace aiprivateavailabilitytests
         private static TelemetryClient telemetryClient;
 
         [FunctionName("TimerTriggerRemoteAvailabilityTests")]
-        public async Task RunAsync([TimerTrigger("5 * * * * *")] TimerInfo myTimer, ILogger log, Microsoft.Azure.WebJobs.ExecutionContext executionContext)
+        public async Task RunAsync([TimerTrigger("%TIMER_SCHEDULE%")] TimerInfo myTimer, ILogger log, Microsoft.Azure.WebJobs.ExecutionContext executionContext)
         {
             log.LogInformation($"C# Timer trigger function executed at: {DateTime.Now}");
 
