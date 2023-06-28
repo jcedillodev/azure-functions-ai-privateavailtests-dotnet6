@@ -1,25 +1,38 @@
 using System;
-using System.Diagnostics;
-using System.Net.Http;
+using System.IO;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.WebJobs;
-using Microsoft.Azure.WebJobs.Host;
+using Microsoft.Azure.WebJobs.Extensions.Http;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging;
+using System.Diagnostics;
+using System.Threading;
+using Newtonsoft.Json;
 using Microsoft.ApplicationInsights;
 using Microsoft.ApplicationInsights.Channel;
 using Microsoft.ApplicationInsights.DataContracts;
 using Microsoft.ApplicationInsights.Extensibility;
-using Microsoft.Extensions.Logging;
+using System.Net.Http;
 
 namespace aiprivateavailabilitytests
 {
-    public class TimerTriggerRemoteAvailabilityTests
+    public static class HttpTriggerRemoteAvailabilityTests
     {
         private static TelemetryClient telemetryClient;
 
-        [FunctionName("TimerTriggerRemoteAvailabilityTests")]
-        public async Task RunAsync([TimerTrigger("%TIMER_SCHEDULE%")] TimerInfo myTimer, ILogger log, Microsoft.Azure.WebJobs.ExecutionContext executionContext)
+        [FunctionName("HttpTriggerRemoteAvailabilityTests")]
+        public static async Task<IActionResult> Run(
+            [HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = null)] HttpRequest req,
+            ILogger log, Microsoft.Azure.WebJobs.ExecutionContext executionContext)
         {
-            log.LogInformation($"C# Timer trigger function executed at: {DateTime.Now}");
+            log.LogInformation("C# HTTP trigger function processed a request.");
+
+            string name = req.Query["name"];
+
+            string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
+            dynamic data = JsonConvert.DeserializeObject(requestBody);
+            name = name ?? data?.name;
 
             if (telemetryClient == null)
             {
@@ -55,7 +68,9 @@ namespace aiprivateavailabilitytests
                     activity.Start();
                     availability.Id = Activity.Current.SpanId.ToString();
                     // Run business logic 
-                    await RunAvailabilityTestAsync(log);
+                    // await RunAvailabilityTestAsync(log);
+                    AppInsightsAvailabilityTests appInsightsAvailabilityTests = new AppInsightsAvailabilityTests();
+                    await appInsightsAvailabilityTests.RunAvailabilityTestAsync(log);
                 }
                 availability.Success = true;
             }
@@ -76,9 +91,15 @@ namespace aiprivateavailabilitytests
 
                 log.LogInformation($"Availability test completed and logged to Application Insights at: {DateTime.Now}");
             }
+
+            string responseMessage = string.IsNullOrEmpty(name)
+                ? "This HTTP triggered function executed successfully. Pass a name in the query string or in the request body for a personalized response."
+                : $"Hello, {name}. This HTTP triggered function executed successfully.";
+
+            return new OkObjectResult(responseMessage);
         }
 
-        public async static Task RunAvailabilityTestAsync(ILogger log)
+        /*public async static Task RunAvailabilityTestAsync(ILogger log)
         {
             using (var httpClient = new HttpClient())
             {
@@ -96,6 +117,6 @@ namespace aiprivateavailabilitytests
                     log.LogInformation(ex.Message);
                 }
             }
-        }
+        }*/
     }
 }
