@@ -1,5 +1,5 @@
 # azure-functions-ai-privateavailtests-dotnet6
-This project is a sample .NET 6 function app which defines a Timer trigger that initiates an async http request to remotely call an app service that is isolated from public network access for Availability Test call(s) that is then logged into App Insights.
+This project is a sample .NET 6 function app which defines Timer/Http trigger function(s) that initiate an async http request to remotely call an app service that is isolated from public network access for Availability Test call(s) that is then logged into App Insights.
 
 # <h1>Repro Steps</h1>
 
