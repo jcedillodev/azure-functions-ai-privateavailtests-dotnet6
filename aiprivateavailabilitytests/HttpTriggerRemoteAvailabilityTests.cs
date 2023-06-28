@@ -14,6 +14,7 @@ using Microsoft.ApplicationInsights.Channel;
 using Microsoft.ApplicationInsights.DataContracts;
 using Microsoft.ApplicationInsights.Extensibility;
 using System.Net.Http;
+using Microsoft.Extensions.Configuration;
 
 namespace aiprivateavailabilitytests
 {
@@ -28,15 +29,11 @@ namespace aiprivateavailabilitytests
         {
             log.LogInformation("C# HTTP trigger function processed a request.");
 
-            string name = req.Query["name"];
-
-            string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
-            dynamic data = JsonConvert.DeserializeObject(requestBody);
-            name = name ?? data?.name;
-
+            // Check if there is an existing telemetry client; if not, then establish one to the target app insights instance
+            // using the app setting (AI_PRIVATEAVAILTESTS_APPLICATIONINSIGHTS_CONNECTION_STRING)
             if (telemetryClient == null)
             {
-                // Initializing a telemetry configuration for Application Insights based on connection string 
+                // Initializing a telemetry configuration class (Azure Monitor SDK) for Application Insights based on connection string 
                 log.LogInformation($"Telemetry configuration initiated for Application Insights at: {DateTime.Now}");
 
                 var telemetryConfiguration = new TelemetryConfiguration();
@@ -45,17 +42,23 @@ namespace aiprivateavailabilitytests
                 telemetryClient = new TelemetryClient(telemetryConfiguration);
             }
 
-            string testName = executionContext.FunctionName;
+            // Retrieve values such as the function name (executionContext - HttpTrigger attribute)
+            // along with the target app(s) region from the app setting (APP_REGION)
+            string fctName = executionContext.FunctionName;
             string location = Environment.GetEnvironmentVariable("APP_REGION");
+
+            // Instantiate the AvailabilityTelemetry class (Azure Monitor SDK) and set property values
             var availability = new AvailabilityTelemetry
             {
-                Name = testName,
+                Name = fctName,
                 RunLocation = location,
                 Success = false,
             };
 
             availability.Context.Operation.ParentId = Activity.Current.SpanId.ToString();
             availability.Context.Operation.Id = Activity.Current.RootId;
+
+            // Instantiate the StopWatch class (Azure Monitor SDK) to track start/stop times from when call is made to target app(s) for duration
             var stopwatch = new Stopwatch();
             stopwatch.Start();
 
@@ -67,8 +70,8 @@ namespace aiprivateavailabilitytests
                 {
                     activity.Start();
                     availability.Id = Activity.Current.SpanId.ToString();
-                    // Run business logic 
-                    // await RunAvailabilityTestAsync(log);
+
+                    // Instantiate the AppInsightsAvailabilityTests
                     AppInsightsAvailabilityTests appInsightsAvailabilityTests = new AppInsightsAvailabilityTests();
                     await appInsightsAvailabilityTests.RunAvailabilityTestAsync(log);
                 }
@@ -77,46 +80,32 @@ namespace aiprivateavailabilitytests
 
             catch (Exception ex)
             {
+                // If errors occur within the try/catch block, log error(s)
                 availability.Message = ex.Message;
+                log.LogInformation(availability.Message);
                 throw;
             }
 
             finally
             {
+                // Stop StopWatch instance run then set duration/timestamp properties for Availablility object
                 stopwatch.Stop();
                 availability.Duration = stopwatch.Elapsed;
                 availability.Timestamp = DateTimeOffset.UtcNow;
+
+                // Using the telemetry client, log data from Availability object into target app insights
                 telemetryClient.TrackAvailability(availability);
+
+                // Remove any existing in-memory data from the telemetry client before finishing execution
                 telemetryClient.Flush();
 
                 log.LogInformation($"Availability test completed and logged to Application Insights at: {DateTime.Now}");
             }
 
-            string responseMessage = string.IsNullOrEmpty(name)
-                ? "This HTTP triggered function executed successfully. Pass a name in the query string or in the request body for a personalized response."
-                : $"Hello, {name}. This HTTP triggered function executed successfully.";
+            // Set response message to send to user(s) when calling http trigger function
+            string responseMessage = $"Function {fctName} has successfully run and sent availability tests to the target App Insights resource.";
 
             return new OkObjectResult(responseMessage);
         }
-
-        /*public async static Task RunAvailabilityTestAsync(ILogger log)
-        {
-            using (var httpClient = new HttpClient())
-            {
-                var appendpoint = string.IsNullOrEmpty(Environment.GetEnvironmentVariable("AI_PRIVATEAVAILTESTS_APP_ENDPOINT")) ? "https://www.google.com/" : Environment.GetEnvironmentVariable("AI_PRIVATEAVAILTESTS_APP_ENDPOINT");
-
-                // TODO: Replace with your business logic 
-                try
-                {
-                    log.LogInformation($"Attempting to initiate async http call to app endpoint at: {DateTime.Now}");
-
-                    await httpClient.GetStringAsync(appendpoint);
-                }
-                catch (Exception ex)
-                {
-                    log.LogInformation(ex.Message);
-                }
-            }
-        }*/
     }
 }
